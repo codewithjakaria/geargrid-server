@@ -8,6 +8,7 @@ import { toNodeHandler } from 'better-auth/node';
 import { jwt } from 'better-auth/plugins';
 import { createVerifyToken } from './middlewares/verifyToken.js';
 import { createEquipmentRouter } from './routes/equipment.routes.js';
+import { createAdminRouter } from './routes/admin.routes.js';
 
 const app = express();
 const port = process.env.PORT || 5000;
@@ -25,12 +26,19 @@ try {
 }
 
 const db = client.db('geargrid');
+const clientOrigins = [
+  'http://localhost:3000',
+  ...(process.env.CLIENT_URL || '')
+    .split(',')
+    .map((origin) => origin.trim())
+    .filter(Boolean),
+];
 
 const auth = betterAuth({
   database: mongodbAdapter(db, { client }),
   baseURL: process.env.BETTER_AUTH_URL,
   secret: process.env.BETTER_AUTH_SECRET,
-  trustedOrigins: ['http://localhost:3000'],
+  trustedOrigins: clientOrigins,
   emailAndPassword: { enabled: true, minPasswordLength: 6 },
   user: {
     additionalFields: {
@@ -48,7 +56,15 @@ const auth = betterAuth({
   ],
 });
 
-app.use(cors({ origin: 'http://localhost:3000', credentials: true }));
+app.use(
+  cors({
+    origin(origin, callback) {
+      if (!origin || clientOrigins.includes(origin)) return callback(null, true);
+      return callback(new Error('Origin is not allowed by CORS'));
+    },
+    credentials: true,
+  }),
+);
 app.all('/api/auth/*splat', toNodeHandler(auth));
 app.use(express.json());
 const verifyToken = createVerifyToken(process.env.BETTER_AUTH_URL);
@@ -61,6 +77,7 @@ app.get('/', (req, res) => {
   res.send('GearGrid Server is Running');
 });
 app.use('/api/equipment', createEquipmentRouter(db, verifyToken));
+app.use('/api/admin', createAdminRouter(db, verifyToken));
 
 app.listen(port, () => {
   console.log(`GearGrid Server app listening on port ${port}`);
