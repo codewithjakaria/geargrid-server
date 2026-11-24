@@ -5,6 +5,8 @@ import { MongoClient } from 'mongodb';
 import { betterAuth } from 'better-auth';
 import { mongodbAdapter } from '@better-auth/mongo-adapter';
 import { toNodeHandler } from 'better-auth/node';
+import { jwt } from 'better-auth/plugins';
+import { createVerifyToken } from './middlewares/verifyToken.js';
 
 const app = express();
 const port = process.env.PORT || 5000;
@@ -36,11 +38,23 @@ const auth = betterAuth({
       address: { type: 'string', required: false },
     },
   },
+  plugins: [
+    jwt({
+      jwt: {
+        definePayload: ({ user }) => ({ email: user.email, role: user.role }),
+      },
+    }),
+  ],
 });
 
 app.use(cors({ origin: 'http://localhost:3000', credentials: true }));
-app.all('/api/auth/*splat', toNodeHandler(auth)); // express.json() এর আগে
+app.all('/api/auth/*splat', toNodeHandler(auth));
 app.use(express.json());
+const verifyToken = createVerifyToken(process.env.BETTER_AUTH_URL);
+
+app.get('/api/me', verifyToken, (req, res) => {
+  res.send({ success: true, user: req.user });
+});
 
 app.get('/', (req, res) => {
   res.send('GearGrid Server is Running');
