@@ -3,6 +3,7 @@ import express from 'express';
 import cors from 'cors';
 import { MongoClient } from 'mongodb';
 import { betterAuth } from 'better-auth';
+import { APIError, createAuthMiddleware } from 'better-auth/api';
 import { mongodbAdapter } from '@better-auth/mongo-adapter';
 import { toNodeHandler } from 'better-auth/node';
 import { jwt } from 'better-auth/plugins';
@@ -10,6 +11,7 @@ import { createVerifyToken } from './middlewares/verifyToken.js';
 import { createEquipmentRouter } from './routes/equipment.routes.js';
 import { createAdminRouter } from './routes/admin.routes.js';
 import { createProfileRouter } from './routes/profile.routes.js';
+import { createFavoriteRouter } from './routes/favorite.routes.js';
 
 const app = express();
 const port = process.env.PORT || 5000;
@@ -35,12 +37,38 @@ const clientOrigins = [
     .filter(Boolean),
 ];
 
+// Add Google sign-in only when both Google keys are configured.
+const socialProviders = {};
+if (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) {
+  socialProviders.google = {
+    clientId: process.env.GOOGLE_CLIENT_ID,
+    clientSecret: process.env.GOOGLE_CLIENT_SECRET,
+  };
+}
+
+// Check the assignment's uppercase and lowercase password rules on the server.
+const checkSignupPassword = createAuthMiddleware(async (context) => {
+  if (context.path !== '/sign-up/email') return;
+
+  const password = context.body?.password;
+  if (typeof password !== 'string') return;
+
+  if (!/[A-Z]/.test(password) || !/[a-z]/.test(password)) {
+    throw APIError.from('BAD_REQUEST', {
+      code: 'PASSWORD_NEEDS_UPPERCASE_AND_LOWERCASE',
+      message: 'Password must include an uppercase and a lowercase letter',
+    });
+  }
+});
+
 const auth = betterAuth({
   database: mongodbAdapter(db, { client }),
   baseURL: process.env.BETTER_AUTH_URL,
   secret: process.env.BETTER_AUTH_SECRET,
   trustedOrigins: clientOrigins,
   emailAndPassword: { enabled: true, minPasswordLength: 6 },
+  socialProviders,
+  hooks: { before: checkSignupPassword },
   user: {
     additionalFields: {
       role: { type: 'string', defaultValue: 'customer', input: false },
@@ -80,6 +108,7 @@ app.get('/', (req, res) => {
 app.use('/api/equipment', createEquipmentRouter(db, verifyToken));
 app.use('/api/admin', createAdminRouter(db, verifyToken));
 app.use('/api/profile', createProfileRouter(db, verifyToken));
+app.use('/api/favorites', createFavoriteRouter(db, verifyToken));
 
 app.listen(port, () => {
   console.log(`GearGrid Server app listening on port ${port}`);
