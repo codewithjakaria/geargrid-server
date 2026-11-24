@@ -7,6 +7,7 @@ import { mongodbAdapter } from '@better-auth/mongo-adapter';
 import { toNodeHandler } from 'better-auth/node';
 import { jwt } from 'better-auth/plugins';
 import { createVerifyToken } from './middlewares/verifyToken.js';
+import { createEquipmentRouter } from './routes/equipment.routes.js';
 
 const app = express();
 const port = process.env.PORT || 5000;
@@ -59,6 +60,7 @@ app.get('/api/me', verifyToken, (req, res) => {
 app.get('/', (req, res) => {
   res.send('GearGrid Server is Running');
 });
+app.use('/api/equipment', createEquipmentRouter(db, verifyToken));
 
 app.listen(port, () => {
   console.log(`GearGrid Server app listening on port ${port}`);
