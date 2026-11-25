@@ -5,7 +5,6 @@ import { createVerifyRole } from '../middlewares/verifyRole.js';
 const DAY_IN_MILLISECONDS = 24 * 60 * 60 * 1000;
 
 function readDate(value) {
-  // The API accepts dates in YYYY-MM-DD format.
   if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value)) {
     return null;
   }
@@ -32,7 +31,6 @@ export function createBookingRouter(db, verifyToken) {
   const verifyOwner = createVerifyRole(db, ['Owner']);
   const verifyAdmin = createVerifyRole(db, ['Admin']);
 
-  // Customer sends a booking request after selecting equipment and dates.
   router.post('/', verifyToken, verifyCustomer, async (req, res) => {
     try {
       const equipmentId = req.body?.equipmentId;
@@ -92,8 +90,6 @@ export function createBookingRouter(db, verifyToken) {
       if (!item.owner || !item.owner.userId) {
         return res.status(409).json({ message: 'Equipment owner information is missing' });
       }
-
-      // End date is treated as the last rental day, so add one to the difference.
       const differenceInDays = Math.floor((endDate - startDate) / DAY_IN_MILLISECONDS);
       const numberOfDays = differenceInDays + 1;
 

@@ -2,6 +2,7 @@ import 'dotenv/config';
 import express from 'express';
 import cors from 'cors';
 import { MongoClient } from 'mongodb';
+import Stripe from 'stripe';
 import { betterAuth } from 'better-auth';
 import { APIError, createAuthMiddleware } from 'better-auth/api';
 import { mongodbAdapter } from '@better-auth/mongo-adapter';
@@ -13,6 +14,7 @@ import { createAdminRouter } from './routes/admin.routes.js';
 import { createProfileRouter } from './routes/profile.routes.js';
 import { createFavoriteRouter } from './routes/favorite.routes.js';
 import { createBookingRouter } from './routes/booking.routes.js';
+import { createPaymentRouter } from './routes/payment.routes.js';
 
 const app = express();
 const port = process.env.PORT || 5000;
@@ -30,6 +32,9 @@ try {
 }
 
 const db = client.db('geargrid');
+const stripe = process.env.STRIPE_SECRET_KEY
+  ? new Stripe(process.env.STRIPE_SECRET_KEY)
+  : null;
 const clientOrigins = [
   'http://localhost:3000',
   ...(process.env.CLIENT_URL || '')
@@ -111,6 +116,7 @@ app.use('/api/admin', createAdminRouter(db, verifyToken));
 app.use('/api/profile', createProfileRouter(db, verifyToken));
 app.use('/api/favorites', createFavoriteRouter(db, verifyToken));
 app.use('/api/bookings', createBookingRouter(db, verifyToken));
+app.use('/api/payments', createPaymentRouter(db, verifyToken, stripe));
 
 app.listen(port, () => {
   console.log(`GearGrid Server app listening on port ${port}`);
