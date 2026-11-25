@@ -1,7 +1,7 @@
 export function createVerifyRole(db, allowedRoles = []) {
   return async function verifyRole(req, res, next) {
     try {
-      // verifyToken runs first and adds the signed-in user's email to req.user.
+      
       if (!req.user || !req.user.email) {
         return res.status(401).json({ message: 'Please sign in first' });
       }
@@ -13,7 +13,6 @@ export function createVerifyRole(db, allowedRoles = []) {
         return res.status(404).json({ message: 'User was not found' });
       }
 
-      // Read the role from MongoDB so a changed role takes effect right away.
       const userRole = (user.role || 'Customer').toLowerCase();
       let roleIsAllowed = false;
 
@@ -28,7 +27,7 @@ export function createVerifyRole(db, allowedRoles = []) {
         return res.status(403).json({ message: 'You do not have permission for this action' });
       }
 
-      // Save the full database user for routes that need their id or name.
+
       req.dbUser = user;
       next();
     } catch (error) {

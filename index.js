@@ -12,6 +12,7 @@ import { createEquipmentRouter } from './routes/equipment.routes.js';
 import { createAdminRouter } from './routes/admin.routes.js';
 import { createProfileRouter } from './routes/profile.routes.js';
 import { createFavoriteRouter } from './routes/favorite.routes.js';
+import { createBookingRouter } from './routes/booking.routes.js';
 
 const app = express();
 const port = process.env.PORT || 5000;
@@ -109,6 +110,7 @@ app.use('/api/equipment', createEquipmentRouter(db, verifyToken));
 app.use('/api/admin', createAdminRouter(db, verifyToken));
 app.use('/api/profile', createProfileRouter(db, verifyToken));
 app.use('/api/favorites', createFavoriteRouter(db, verifyToken));
+app.use('/api/bookings', createBookingRouter(db, verifyToken));
 
 app.listen(port, () => {
   console.log(`GearGrid Server app listening on port ${port}`);
