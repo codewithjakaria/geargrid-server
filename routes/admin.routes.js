@@ -19,7 +19,85 @@ function isObjectId(value) {
 export function createAdminRouter(db, verifyToken) {
   const router = Router();
   const users = db.collection('user');
+  const equipment = db.collection('equipment');
+  const bookings = db.collection('bookings');
+  const payments = db.collection('payments');
   const verifyAdmin = createVerifyRole(db, ['Admin']);
+
+  // Admin dashboard numbers required by the assignment.
+  router.get('/analytics', verifyToken, verifyAdmin, async (req, res) => {
+    try {
+      const today = new Date();
+      const currentYear = today.getUTCFullYear();
+      const currentMonth = today.getUTCMonth();
+      const firstMonth = new Date(Date.UTC(currentYear, currentMonth - 11, 1));
+      const nextMonth = new Date(Date.UTC(currentYear, currentMonth + 1, 1));
+
+      const [
+        totalUsers,
+        totalEquipment,
+        totalBookings,
+        pendingApprovals,
+        completedRentals,
+        paidPayments,
+        recentBookings,
+      ] = await Promise.all([
+        users.countDocuments({}),
+        equipment.countDocuments({}),
+        bookings.countDocuments({}),
+        equipment.countDocuments({ status: 'Pending' }),
+        bookings.countDocuments({ bookingStatus: 'Completed' }),
+        payments
+          .aggregate([
+            { $match: { status: 'Paid' } },
+            { $group: { _id: null, totalRevenue: { $sum: '$amount' } } },
+          ])
+          .toArray(),
+        bookings
+          .find(
+            { createdAt: { $gte: firstMonth, $lt: nextMonth } },
+            { projection: { createdAt: 1 } },
+          )
+          .toArray(),
+      ]);
+
+      // Count bookings by month so the dashboard can draw a simple chart.
+      const bookingCountsByMonth = {};
+      for (const booking of recentBookings) {
+        if (!(booking.createdAt instanceof Date)) continue;
+
+        const month = booking.createdAt.toISOString().slice(0, 7);
+        bookingCountsByMonth[month] = (bookingCountsByMonth[month] || 0) + 1;
+      }
+
+      // Include all 12 months, even if there were no bookings in a month.
+      const monthlyBookingStats = [];
+      for (let monthNumber = 0; monthNumber < 12; monthNumber += 1) {
+        const date = new Date(Date.UTC(currentYear, currentMonth - 11 + monthNumber, 1));
+        const month = date.toISOString().slice(0, 7);
+
+        monthlyBookingStats.push({
+          month,
+          bookings: bookingCountsByMonth[month] || 0,
+        });
+      }
+
+      res.json({
+        analytics: {
+          totalUsers,
+          totalEquipment,
+          totalBookings,
+          pendingApprovals,
+          completedRentals,
+          totalRevenue: paidPayments[0]?.totalRevenue || 0,
+          monthlyBookingStats,
+        },
+      });
+    } catch (error) {
+      console.error('Admin analytics error:', error.message);
+      res.status(500).json({ message: 'Could not load admin analytics' });
+    }
+  });
 
   router.get('/users', verifyToken, verifyAdmin, async (req, res) => {
     try {
