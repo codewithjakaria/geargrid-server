@@ -26,10 +26,82 @@ export function createBookingRouter(db, verifyToken) {
   const router = Router();
   const bookings = db.collection('bookings');
   const equipment = db.collection('equipment');
+  const payments = db.collection('payments');
 
   const verifyCustomer = createVerifyRole(db, ['Customer']);
   const verifyOwner = createVerifyRole(db, ['Owner']);
   const verifyAdmin = createVerifyRole(db, ['Admin']);
+
+  // Show an owner simple business totals for their dashboard.
+  router.get('/owner-analytics', verifyToken, verifyOwner, async (req, res) => {
+    try {
+      const ownerId = req.dbUser._id.toString();
+      const today = new Date();
+      const currentYear = today.getUTCFullYear();
+      const currentMonth = today.getUTCMonth();
+      const firstMonth = new Date(Date.UTC(currentYear, currentMonth - 11, 1));
+      const nextMonth = new Date(Date.UTC(currentYear, currentMonth + 1, 1));
+
+      const [
+        totalListedEquipment,
+        completedRentals,
+        paidPayments,
+        recentPaidPayments,
+      ] = await Promise.all([
+        equipment.countDocuments({ 'owner.userId': ownerId }),
+        bookings.countDocuments({ ownerId, bookingStatus: 'Completed' }),
+        payments
+          .aggregate([
+            { $match: { ownerId, status: 'Paid' } },
+            { $group: { _id: null, totalEarnings: { $sum: '$amount' } } },
+          ])
+          .toArray(),
+        payments
+          .find(
+            {
+              ownerId,
+              status: 'Paid',
+              paidAt: { $gte: firstMonth, $lt: nextMonth },
+            },
+            { projection: { paidAt: 1, amount: 1 } },
+          )
+          .toArray(),
+      ]);
+
+      // Add each payment amount to the month when the customer paid.
+      const earningsByMonth = {};
+      for (const payment of recentPaidPayments) {
+        if (!(payment.paidAt instanceof Date)) continue;
+
+        const month = payment.paidAt.toISOString().slice(0, 7);
+        earningsByMonth[month] = (earningsByMonth[month] || 0) + payment.amount;
+      }
+
+      // Include all 12 months, even when the owner had no paid rentals.
+      const monthlyEarnings = [];
+      for (let monthNumber = 0; monthNumber < 12; monthNumber += 1) {
+        const date = new Date(Date.UTC(currentYear, currentMonth - 11 + monthNumber, 1));
+        const month = date.toISOString().slice(0, 7);
+
+        monthlyEarnings.push({
+          month,
+          earnings: earningsByMonth[month] || 0,
+        });
+      }
+
+      res.json({
+        analytics: {
+          totalListedEquipment,
+          completedRentals,
+          totalEarnings: paidPayments[0]?.totalEarnings || 0,
+          monthlyEarnings,
+        },
+      });
+    } catch (error) {
+      console.error('Owner analytics error:', error.message);
+      res.status(500).json({ message: 'Could not load owner analytics' });
+    }
+  });
 
   router.post('/', verifyToken, verifyCustomer, async (req, res) => {
     try {
