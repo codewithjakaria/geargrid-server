@@ -33,33 +33,27 @@ export function createAdminRouter(db, verifyToken) {
       const firstMonth = new Date(Date.UTC(currentYear, currentMonth - 11, 1));
       const nextMonth = new Date(Date.UTC(currentYear, currentMonth + 1, 1));
 
-      const [
-        totalUsers,
-        totalEquipment,
-        totalBookings,
-        pendingApprovals,
-        completedRentals,
-        paidPayments,
-        recentBookings,
-      ] = await Promise.all([
-        users.countDocuments({}),
-        equipment.countDocuments({}),
-        bookings.countDocuments({}),
-        equipment.countDocuments({ status: 'Pending' }),
-        bookings.countDocuments({ bookingStatus: 'Completed' }),
-        payments
-          .aggregate([
-            { $match: { status: 'Paid' } },
-            { $group: { _id: null, totalRevenue: { $sum: '$amount' } } },
-          ])
-          .toArray(),
-        bookings
-          .find(
-            { createdAt: { $gte: firstMonth, $lt: nextMonth } },
-            { projection: { createdAt: 1 } },
-          )
-          .toArray(),
-      ]);
+      const totalUsers = await users.countDocuments({});
+      const totalEquipment = await equipment.countDocuments({});
+      const totalBookings = await bookings.countDocuments({});
+      const pendingApprovals = await equipment.countDocuments({ status: 'Pending' });
+      const completedRentals = await bookings.countDocuments({ bookingStatus: 'Completed' });
+
+      // Ask MongoDB to add up the amounts from successful payments.
+      const paidPayments = await payments
+        .aggregate([
+          { $match: { status: 'Paid' } },
+          { $group: { _id: null, totalRevenue: { $sum: '$amount' } } },
+        ])
+        .toArray();
+      const totalRevenue = paidPayments[0]?.totalRevenue || 0;
+
+      const recentBookings = await bookings
+        .find(
+          { createdAt: { $gte: firstMonth, $lt: nextMonth } },
+          { projection: { createdAt: 1 } },
+        )
+        .toArray();
 
       // Count bookings by month so the dashboard can draw a simple chart.
       const bookingCountsByMonth = {};
@@ -89,7 +83,7 @@ export function createAdminRouter(db, verifyToken) {
           totalBookings,
           pendingApprovals,
           completedRentals,
-          totalRevenue: paidPayments[0]?.totalRevenue || 0,
+          totalRevenue,
           monthlyBookingStats,
         },
       });
