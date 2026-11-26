@@ -308,5 +308,44 @@ export function createBookingRouter(db, verifyToken) {
     }
   });
 
+  // An admin can move a paid rental from confirmed to ongoing, then completed.
+  router.patch('/admin/:id/status', verifyToken, verifyAdmin, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const nextStatus = req.body?.bookingStatus;
+
+      if (!ObjectId.isValid(id) || new ObjectId(id).toString() !== id) {
+        return res.status(400).json({ message: 'Invalid booking ID' });
+      }
+      if (!['Ongoing', 'Completed'].includes(nextStatus)) {
+        return res.status(400).json({ message: 'bookingStatus must be Ongoing or Completed' });
+      }
+
+      const booking = await bookings.findOne({ _id: new ObjectId(id) });
+      if (!booking) {
+        return res.status(404).json({ message: 'Booking not found' });
+      }
+      if (booking.paymentStatus !== 'Paid') {
+        return res.status(409).json({ message: 'Only paid bookings can be updated' });
+      }
+      if (nextStatus === 'Ongoing' && booking.bookingStatus !== 'Confirmed') {
+        return res.status(409).json({ message: 'Only confirmed bookings can be marked ongoing' });
+      }
+      if (nextStatus === 'Completed' && booking.bookingStatus !== 'Ongoing') {
+        return res.status(409).json({ message: 'Only ongoing bookings can be marked completed' });
+      }
+
+      await bookings.updateOne(
+        { _id: new ObjectId(id) },
+        { $set: { bookingStatus: nextStatus, updatedAt: new Date() } },
+      );
+
+      res.json({ message: 'Booking status updated', bookingStatus: nextStatus });
+    } catch (error) {
+      console.error('Admin booking status error:', error.message);
+      res.status(500).json({ message: 'Could not update booking status' });
+    }
+  });
+
   return router;
 }
